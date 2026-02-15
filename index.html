@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>チャットログソート</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+
+    <div class="container py-4">
+        <h2 class="mb-4">チャットログ検索</h2>
+
+        <div class="card p-3 mb-4">
+            <div class="mb-3">
+                <label class="form-label">① チャットログ（HTML）</label>
+                <input type="file" id="logFile" class="form-control">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">② 検索表（txt）※未指定でOK</label>
+                <input type="file" id="sortFile" class="form-control">
+            </div>
+
+            <button class="btn btn-primary" onclick="loadFiles()">読み込み</button>
+        </div>
+
+        <div id="filters" class="mb-4" style="display:none;">
+            <h5>検索</h5>
+
+            <div class="mb-3">
+                <label>チャット名</label>
+                <div id="chatFilters"></div>
+            </div>
+
+            <div class="mb-3">
+                <div class="card-header">
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse"
+                        data-bs-target="#charCollapse">
+                        キャラ名 ▼
+                    </button>
+                    <label></label>
+                </div>
+
+                <div id="charCollapse" class="collapse">
+                    <div class="card card-body" id="charFilters"></div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label>会話キーワード</label>
+                <div id="msgFilters"></div>
+            </div>
+
+            <button class="btn btn-success" onclick="applyFilter()">絞り込み</button>
+        </div>
+
+        <hr>
+
+        <h5>結果</h5>
+        <table class="table table-bordered table-sm">
+            <thead class="table-dark">
+                <tr>
+                    <th>チャット名</th>
+                    <th>キャラ名</th>
+                    <th>会話内容</th>
+                </tr>
+            </thead>
+            <tbody id="resultTable"></tbody>
+        </table>
+
+    </div>
+
+    <script>
+        let logs = [];
+        let sortData = {};
+
+        function loadFiles() {
+
+            const logFile = document.getElementById("logFile").files[0];
+            const sortFile = document.getElementById("sortFile").files[0];
+
+            if (!logFile) {
+                alert("チャットログを選択してください");
+                return;
+            }
+
+            const reader1 = new FileReader();
+            reader1.onload = function (e) {
+                parseLog(e.target.result);
+
+                if (sortFile) {
+                    const reader2 = new FileReader();
+                    reader2.onload = function (e2) {
+                        parseSort(e2.target.result);
+                    };
+                    reader2.readAsText(sortFile);
+                } else {
+                    useDefaultSort();
+                }
+            };
+
+            reader1.readAsText(logFile);
+        }
+
+        function useDefaultSort() {
+
+            sortData.chat = ["main", "info", "other", "観戦用"];
+            sortData.msg = ["成功", "失敗", "致命的失敗", "決定的成功"];
+
+            // キャラ名はログから抽出
+            sortData.char = [...new Set(logs.map(l => l.char))];
+
+            renderFilters();
+        }
+
+        function parseLog(html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            const ps = doc.querySelectorAll("p");
+
+            logs = [];
+
+            ps.forEach(p => {
+                const spans = p.querySelectorAll("span");
+                if (spans.length >= 3) {
+                    const chat = spans[0].innerText.replace("[", "").replace("]", "").trim();
+                    const char = spans[1].innerText.trim();
+                    const msg = spans[2].innerText.trim();
+
+                    logs.push({ chat, char, msg });
+                }
+            });
+        }
+
+        function parseSort(text) {
+
+            const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+
+            sortData.chat = cleanSplit(lines[0] || "");
+            sortData.char = cleanSplit(lines[1] || "");
+            sortData.msg = cleanSplit(lines[2] || "");
+
+            renderFilters();
+        }
+
+        function renderFilters() {
+
+            createCheckbox("chatFilters", sortData.chat, "chat");
+            createCheckbox("charFilters", sortData.char, "char");
+            createCheckbox("msgFilters", sortData.msg, "msg");
+
+            document.getElementById("filters").style.display = "block";
+        }
+
+
+        function createCheckbox(id, items, name) {
+
+            const div = document.getElementById(id);
+            div.innerHTML = "";
+
+            // all追加
+            const allItem = ["all", ...items];
+
+            allItem.forEach((item, index) => {
+
+                const checkbox = `
+            <div class="form-check form-check-inline mb-1">
+                <input class="form-check-input" 
+                       type="checkbox" 
+                       id="${name}_${index}" 
+                       name="${name}" 
+                       value="${item}"
+                       ${item === "all" ? "checked" : ""}>
+                <label class="form-check-label" for="${name}_${index}">
+                    ${item}
+                </label>
+            </div>
+        `;
+
+                div.insertAdjacentHTML("beforeend", checkbox);
+            });
+        }
+
+
+        function getChecked(name) {
+            return Array.from(document.querySelectorAll(`input[name=${name}]:checked`))
+                .map(el => el.value);
+        }
+
+        function applyFilter() {
+
+            const chatSelected = getChecked("chat");
+            const charSelected = getChecked("char");
+            const msgSelected = getChecked("msg");
+
+            const result = logs.filter(log => {
+
+                // --- チャット名
+                const chatMatch =
+                    chatSelected.includes("all")
+                        ? true
+                        : chatSelected.includes(log.chat);
+
+                // --- キャラ名
+                const charMatch =
+                    charSelected.includes("all")
+                        ? true
+                        : charSelected.includes(log.char);
+
+                // --- 会話キーワード
+                const msgMatch =
+                    msgSelected.includes("all")
+                        ? true
+                        : msgSelected.some(keyword => log.msg.includes(keyword));
+
+                return chatMatch && charMatch && msgMatch;
+            });
+
+            displayResult(result);
+        }
+
+
+        function displayResult(data) {
+            const tbody = document.getElementById("resultTable");
+            tbody.innerHTML = "";
+
+            data.forEach(row => {
+                tbody.innerHTML += `
+            <tr>
+                <td>${row.chat}</td>
+                <td>${row.char}</td>
+                <td>${row.msg}</td>
+            </tr>
+        `;
+            });
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+
+</html>
