@@ -14,14 +14,14 @@
 
         <div class="card p-3 mb-4">
             <div class="mb-3">
-                <label class="form-label">① チャットログ（HTML）</label>
+                <label class="form-label">チャットログ（HTML）</label>
                 <input type="file" id="logFile" class="form-control">
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">② 検索表（txt）※未指定でOK</label>
+            <!-- <div class="mb-3">
+                <label class="form-label">検索表（txt）※未指定でOK</label>
                 <input type="file" id="sortFile" class="form-control">
-            </div>
+            </div> -->
 
             <button class="btn btn-primary" onclick="loadFiles()">読み込み</button>
         </div>
@@ -79,7 +79,8 @@
         function loadFiles() {
 
             const logFile = document.getElementById("logFile").files[0];
-            const sortFile = document.getElementById("sortFile").files[0];
+            // const sortFile = document.getElementById("sortFile").files[0];
+            const sortFile = null;
 
             if (!logFile) {
                 alert("チャットログを選択してください");
@@ -106,11 +107,19 @@
 
         function useDefaultSort() {
 
-            sortData.chat = ["main", "info", "other", "観戦用"];
+            // sortData.chat = ["main", "info", "other", "観戦用"];
             sortData.msg = ["成功", "失敗", "致命的失敗", "決定的成功"];
 
             // キャラ名はログから抽出
             sortData.char = [...new Set(logs.map(l => l.char))];
+            sortData.chat = [...new Set(logs.map(l => l.chat))];
+
+            let targets = ["main", "info", "other"];
+
+            let found = targets.filter(t => sortData.chat.includes(t));
+            let rest = sortData.chat.filter(item => !targets.includes(item));
+
+            sortData.chat = [...found, ...rest];
 
             renderFilters();
         }
@@ -183,6 +192,38 @@
             });
         }
 
+        // 同じname属性ごとに制御
+        document.addEventListener("change", function (e) {
+
+            if (!e.target.matches('input[type="checkbox"][name]')) return;
+
+            const current = e.target;
+            const groupName = current.name;
+
+            const groupBoxes = document.querySelectorAll(
+                `input[type="checkbox"][name="${groupName}"]`
+            );
+
+            // all が選択された場合
+            if (current.value === "all" && current.checked) {
+                groupBoxes.forEach(box => {
+                    if (box.value !== "all") {
+                        box.checked = false;
+                    }
+                });
+            }
+
+            // all 以外が選択された場合
+            if (current.value !== "all" && current.checked) {
+                const allBox = document.querySelector(
+                    `input[type="checkbox"][name="${groupName}"][value="all"]`
+                );
+                if (allBox) {
+                    allBox.checked = false;
+                }
+            }
+
+        });
 
         function getChecked(name) {
             return Array.from(document.querySelectorAll(`input[name=${name}]:checked`))
